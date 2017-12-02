@@ -2,75 +2,44 @@
 
 package_name = "MMTK"
 
-from distutils.core import setup, Command, Extension
+import os
+import sys
+import types
+import ctypes
+import ctypes.util
+import distutils.sysconfig
+import numpy.distutils.misc_util
+
+from setuptools import setup
+from Cython.Build import cythonize
+from Scientific import N
+
+from distutils.core import Command, Extension
 from distutils.command.build import build
 from distutils.command.sdist import sdist
 from distutils.command.install_data import install_data
 from distutils import dir_util
 from distutils.filelist import FileList, translate_pattern
-import distutils.sysconfig
+
+from glob import glob
+from stat import ST_MODE, S_ISREG, S_ISDIR, S_ISLNK
+
 sysconfig = distutils.sysconfig.get_config_vars()
 
-import os, sys, types
-import ctypes, ctypes.util
-from glob import glob
-
-class Dummy:
-    pass
-pkginfo = Dummy()
-execfile('MMTK/__pkginfo__.py', pkginfo.__dict__)
-
-# Check for Cython and use it if the environment variable
-# MMTK_USE_CYTHON is set to a non-zero value.
-use_cython = int(os.environ.get('MMTK_USE_CYTHON', '0')) != 0
-if use_cython:
-    try:
-        from Cython.Build import cythonize
-        use_cython = True
-    except ImportError:
-        use_cython = False
-
-src_ext = 'pyx' if use_cython else 'c'
-
-# Check that we have Scientific 2.6 or higher
-try:
-    from Scientific import __version__ as scientific_version
-    if scientific_version[-2:] == 'hg':
-        scientific_version = scientific_version[:-2]
-    scientific_version = scientific_version.split('.')
-    scientific_ok = int(scientific_version[0]) >= 2 and \
-                    int(scientific_version[1]) >= 6
-except ImportError:
-    scientific_ok = False
-if not scientific_ok:
-    print "MMTK needs ScientificPython 2.6 or higher"
-    raise SystemExit
+# FIXME: remove redundnat code
+src_ext = 'pyx'
+use_cython = True
 
 compile_args = []
 include_dirs = ['Include']
 
-if (int(scientific_version[1]) >= 8 or \
-    (int(scientific_version[1]) == 7 and int(scientific_version[2]) >= 8)):
-    netcdf_h = os.path.join(sys.prefix, 'include',
-                            'python%d.%d' % sys.version_info[:2],
-                            'Scientific', 'netcdf.h')
-    if os.path.exists(netcdf_h):
-        compile_args.append("-DUSE_NETCDF_H_FROM_SCIENTIFIC=1")
-else:
-    # Take care of the common problem that netcdf is in /usr/local but
-    # /usr/local/include is not on $CPATH.
-    if os.path.exists('/usr/local/include/netcdf.h'):
-        include_dirs.append('/usr/local/include')
+# We'll go ahead and just require ScientificPython for now
+compile_args.append("-DUSE_NETCDF_H_FROM_SCIENTIFIC=1")
 
-from Scientific import N
-try:
-    num_package = N.package
-except AttributeError:
-    num_package = "Numeric"
-if num_package == "NumPy":
-    compile_args.append("-DNUMPY=1")
-    import numpy.distutils.misc_util
-    include_dirs.extend(numpy.distutils.misc_util.get_numpy_include_dirs())
+# num_package will always be numpy
+num_package == "NumPy":
+compile_args.append("-DNUMPY=1")
+include_dirs.extend(numpy.distutils.misc_util.get_numpy_include_dirs())
 
 headers = glob(os.path.join("Include", "MMTK", "*.h"))
 headers.extend(glob(os.path.join("Include", "MMTK", "*.px[di]")))
@@ -84,7 +53,9 @@ paths = [os.path.join('MMTK', 'ForceFields'),
          os.path.join('MMTK', 'Database', 'Proteins'),
          os.path.join('MMTK', 'Database', 'PDB'),
          os.path.join('MMTK', 'Tools', 'TrajectoryViewer')]
+
 data_files = []
+
 for dir in paths:
     files = []
     for f in glob(os.path.join(dir, '*')):
@@ -96,7 +67,6 @@ for dir in paths:
 class ModifiedFileList(FileList):
 
     def findall(self, dir=os.curdir):
-        from stat import ST_MODE, S_ISREG, S_ISDIR, S_ISLNK
         list = []
         stack = [dir]
         pop = stack.pop
